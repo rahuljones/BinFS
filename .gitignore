@@ -1,0 +1,9 @@
+**/target/**
+Cargo.lock
+.vscode/
+tribbler/bin
+tribbler/pkg
+www/node_modules
+www/package-lock.json
+# generated files
+bins.json
