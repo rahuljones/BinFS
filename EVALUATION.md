@@ -92,12 +92,17 @@ measurements against both the FUSE mount and a native local directory.
 
 Defaults are 5 warmups and 30 measured iterations. For a quick smoke run:
 
+The default file sizes are 4 KiB, 64 KiB, and 1 MiB. The default chunk sizes
+are 64 KiB and 1 MiB. Larger files and 4 KiB chunks remain available through
+the environment variables below, but are omitted from routine runs because
+they make the sequential RPC data path disproportionately slow.
+
 ```sh
 BINFS_EVAL_ITERATIONS=2 \
 BINFS_EVAL_WARMUP=1 \
 BINFS_EVAL_METADATA_ENTRIES=0,10 \
 BINFS_EVAL_FILE_SIZES=4096,65536 \
-BINFS_EVAL_CHUNK_SIZES=4096,65536 \
+BINFS_EVAL_CHUNK_SIZES=65536,1048576 \
 BINFS_EVAL_CLIENTS=1,4 \
 testbed/benchmark.sh
 ```

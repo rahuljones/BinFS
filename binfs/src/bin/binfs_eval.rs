@@ -53,14 +53,10 @@ struct ServiceArgs {
     #[arg(long, value_delimiter = ',', default_value = "0,100,1000,5000,10000")]
     metadata_entries: Vec<usize>,
 
-    #[arg(
-        long,
-        value_delimiter = ',',
-        default_value = "4096,65536,1048576,16777216"
-    )]
+    #[arg(long, value_delimiter = ',', default_value = "4096,65536,1048576")]
     file_sizes: Vec<usize>,
 
-    #[arg(long, value_delimiter = ',', default_value = "4096,65536,1048576")]
+    #[arg(long, value_delimiter = ',', default_value = "65536,1048576")]
     chunk_sizes: Vec<usize>,
 
     #[arg(long, value_delimiter = ',', default_value = "1,2,4,8,16")]
@@ -101,11 +97,7 @@ struct FilesystemArgs {
     #[arg(long, default_value = "-")]
     output: String,
 
-    #[arg(
-        long,
-        value_delimiter = ',',
-        default_value = "4096,65536,1048576,16777216"
-    )]
+    #[arg(long, value_delimiter = ',', default_value = "4096,65536,1048576")]
     file_sizes: Vec<usize>,
 
     #[arg(long, default_value_t = 30)]
