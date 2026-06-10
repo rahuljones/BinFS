@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::{error::Error, sync::Arc};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
+use tokio::task::JoinSet;
 use tribbler::{
     err::{TribResult, TribblerError},
     storage::{BinStorage, KeyValue},
@@ -65,28 +66,28 @@ impl ChunkStore {
     }
 
     pub async fn store_file(&self, data: &[u8], modified_ms: u64) -> TribResult<FileManifest> {
-        let mut chunks = Vec::new();
-        for chunk in data.chunks(self.chunk_size) {
+        let mut writes = JoinSet::new();
+        for (index, chunk) in data.chunks(self.chunk_size).enumerate() {
             let hash = blake3::hash(chunk).to_hex().to_string();
             let bin_name = self.data_bin_name(&hash);
             let key = format!("chunk:{hash}");
-            let bin = self.bins.bin(&bin_name).await?;
-            with_storage_timeout(
-                "chunk set",
-                bin.set(&KeyValue {
-                    key: key.clone(),
-                    value: STANDARD.encode(chunk),
-                }),
-            )
-            .await
-            .map_err(|err| Box::new(TribblerError::Unknown(err.to_string())))?;
-            chunks.push(ChunkRef {
-                bin: bin_name,
-                key,
-                hash,
-                len: chunk.len(),
-            });
+            let bins = self.bins.clone();
+            let chunk = chunk.to_vec();
+            writes.spawn(async move { store_chunk(bins, index, chunk, bin_name, key, hash).await });
         }
+
+        let mut chunks = vec![None; data.chunks(self.chunk_size).len()];
+        while let Some(result) = writes.join_next().await {
+            let (index, chunk_ref) =
+                result.map_err(|err| unknown_error(format!("chunk task failed: {err}")))??;
+            chunks[index] = Some(chunk_ref);
+        }
+        let chunks = chunks
+            .into_iter()
+            .map(|chunk_ref| {
+                chunk_ref.ok_or_else(|| unknown_error("chunk write task did not return a result"))
+            })
+            .collect::<TribResult<Vec<_>>>()?;
 
         Ok(FileManifest {
             size: data.len() as u64,
@@ -98,27 +99,23 @@ impl ChunkStore {
     }
 
     pub async fn load_file(&self, manifest: &FileManifest) -> TribResult<Vec<u8>> {
+        let mut reads = JoinSet::new();
+        for (index, chunk_ref) in manifest.chunks.iter().cloned().enumerate() {
+            let bins = self.bins.clone();
+            reads.spawn(async move { load_chunk(bins, index, chunk_ref).await });
+        }
+
+        let mut chunks = vec![None; manifest.chunks.len()];
+        while let Some(result) = reads.join_next().await {
+            let (index, chunk) =
+                result.map_err(|err| unknown_error(format!("chunk task failed: {err}")))??;
+            chunks[index] = Some(chunk);
+        }
+
         let mut data = Vec::with_capacity(manifest.size as usize);
-        for chunk_ref in &manifest.chunks {
-            let bin = self.bins.bin(&chunk_ref.bin).await?;
-            let Some(encoded) = with_storage_timeout("chunk get", bin.get(&chunk_ref.key))
-                .await
-                .map_err(|err| Box::new(TribblerError::Unknown(err.to_string())))?
-            else {
-                return Err(Box::new(TribblerError::Unknown(format!(
-                    "missing chunk {}",
-                    chunk_ref.key
-                ))));
-            };
-            let chunk = STANDARD.decode(encoded)?;
-            if chunk.len() != chunk_ref.len
-                || blake3::hash(&chunk).to_hex().to_string() != chunk_ref.hash
-            {
-                return Err(Box::new(TribblerError::Unknown(format!(
-                    "corrupt chunk {}",
-                    chunk_ref.key
-                ))));
-            }
+        for chunk in chunks {
+            let chunk =
+                chunk.ok_or_else(|| unknown_error("chunk read task did not return a result"))?;
             data.extend_from_slice(&chunk);
         }
 
@@ -131,4 +128,58 @@ impl ChunkStore {
         }
         Ok(data)
     }
+}
+
+async fn store_chunk(
+    bins: Arc<dyn BinStorage>,
+    index: usize,
+    chunk: Vec<u8>,
+    bin_name: String,
+    key: String,
+    hash: String,
+) -> TribResult<(usize, ChunkRef)> {
+    let bin = bins.bin(&bin_name).await?;
+    with_storage_timeout(
+        "chunk set",
+        bin.set(&KeyValue {
+            key: key.clone(),
+            value: STANDARD.encode(&chunk),
+        }),
+    )
+    .await
+    .map_err(|err| unknown_error(err.to_string()))?;
+
+    Ok((
+        index,
+        ChunkRef {
+            bin: bin_name,
+            key,
+            hash,
+            len: chunk.len(),
+        },
+    ))
+}
+
+async fn load_chunk(
+    bins: Arc<dyn BinStorage>,
+    index: usize,
+    chunk_ref: ChunkRef,
+) -> TribResult<(usize, Vec<u8>)> {
+    let bin = bins.bin(&chunk_ref.bin).await?;
+    let Some(encoded) = with_storage_timeout("chunk get", bin.get(&chunk_ref.key))
+        .await
+        .map_err(|err| unknown_error(err.to_string()))?
+    else {
+        return Err(unknown_error(format!("missing chunk {}", chunk_ref.key)));
+    };
+    let chunk = STANDARD.decode(encoded)?;
+    if chunk.len() != chunk_ref.len || blake3::hash(&chunk).to_hex().to_string() != chunk_ref.hash {
+        return Err(unknown_error(format!("corrupt chunk {}", chunk_ref.key)));
+    }
+
+    Ok((index, chunk))
+}
+
+fn unknown_error(message: impl Into<String>) -> Box<dyn Error + Send + Sync> {
+    Box::new(TribblerError::Unknown(message.into()))
 }
