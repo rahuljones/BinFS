@@ -119,3 +119,65 @@ fn rejects_non_empty_rmdir_then_allows_after_unlink() {
     assert!(snapshot.op_effective("r2"));
     assert!(snapshot.resolve_path("/a").is_none());
 }
+
+#[test]
+fn rejects_create_when_parent_does_not_exist() {
+    let ops = vec![create("c1", "file1", "missing", "f")];
+    let snapshot = FsSnapshot::replay(&ops);
+
+    assert!(!snapshot.op_effective("c1"));
+    assert!(snapshot.resolve_path("/f").is_none());
+}
+
+#[test]
+fn rejects_commit_after_unlink() {
+    let manifest = FileManifest::empty(64, 4);
+    let ops = vec![
+        create("c1", "file1", ROOT_ID, "f"),
+        FsOp::Unlink {
+            op_id: "u1".to_string(),
+            parent: ROOT_ID.to_string(),
+            name: "f".to_string(),
+            mtime_ms: 3,
+        },
+        FsOp::CommitFile {
+            op_id: "w1".to_string(),
+            object: "file1".to_string(),
+            manifest,
+            mtime_ms: 4,
+        },
+    ];
+    let snapshot = FsSnapshot::replay(&ops);
+
+    assert!(snapshot.op_effective("u1"));
+    assert!(!snapshot.op_effective("w1"));
+    assert!(snapshot.resolve_path("/f").is_none());
+}
+
+#[test]
+fn replay_is_deterministic() {
+    let manifest = FileManifest::empty(64, 3);
+    let ops = vec![
+        mkdir("m1", "dir1", "a"),
+        create("c1", "file1", "dir1", "f"),
+        FsOp::CommitFile {
+            op_id: "w1".to_string(),
+            object: "file1".to_string(),
+            manifest,
+            mtime_ms: 3,
+        },
+    ];
+
+    let first = FsSnapshot::replay(&ops);
+    let second = FsSnapshot::replay(&ops);
+    for path in ["/", "/a", "/a/f"] {
+        let left = first.resolve_path(path).unwrap();
+        let right = second.resolve_path(path).unwrap();
+        assert_eq!(left.id, right.id);
+        assert_eq!(left.parent, right.parent);
+        assert_eq!(left.name, right.name);
+        assert_eq!(left.kind, right.kind);
+        assert_eq!(left.manifest, right.manifest);
+        assert_eq!(first.ino_for_id(&left.id), second.ino_for_id(&right.id));
+    }
+}

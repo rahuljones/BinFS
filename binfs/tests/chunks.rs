@@ -54,3 +54,63 @@ async fn corrupted_chunk_is_rejected() -> TribResult<()> {
     assert!(store.load_file(&manifest).await.is_err());
     Ok(())
 }
+
+#[tokio::test]
+async fn missing_chunk_is_rejected() -> TribResult<()> {
+    let bins = Arc::new(MemBins::default());
+    let store = ChunkStore::new(bins.clone(), 4, 2);
+    let manifest = store.store_file(b"abcdefgh", 1).await?;
+    let first = &manifest.chunks[0];
+    let bin = bins.bin(&first.bin).await?;
+    bin.set(&KeyValue {
+        key: first.key.clone(),
+        value: String::new(),
+    })
+    .await?;
+
+    assert!(store.load_file(&manifest).await.is_err());
+    Ok(())
+}
+
+#[tokio::test]
+async fn truncated_chunk_is_rejected() -> TribResult<()> {
+    let bins = Arc::new(MemBins::default());
+    let store = ChunkStore::new(bins.clone(), 4, 2);
+    let manifest = store.store_file(b"abcdefgh", 1).await?;
+    let first = &manifest.chunks[0];
+    let bin = bins.bin(&first.bin).await?;
+    bin.set(&KeyValue {
+        key: first.key.clone(),
+        value: STANDARD.encode(b"abc"),
+    })
+    .await?;
+
+    assert!(store.load_file(&manifest).await.is_err());
+    Ok(())
+}
+
+#[tokio::test]
+async fn reordered_chunks_are_rejected() -> TribResult<()> {
+    let bins = Arc::new(MemBins::default());
+    let store = ChunkStore::new(bins, 4, 2);
+    let mut manifest = store.store_file(b"abcdefgh", 1).await?;
+    manifest.chunks.swap(0, 1);
+
+    assert!(store.load_file(&manifest).await.is_err());
+    Ok(())
+}
+
+#[tokio::test]
+async fn empty_and_boundary_sized_files_round_trip() -> TribResult<()> {
+    let bins = Arc::new(MemBins::default());
+    let store = ChunkStore::new(bins, 4, 2);
+
+    let empty = store.store_file(&[], 1).await?;
+    assert!(empty.chunks.is_empty());
+    assert_eq!(store.load_file(&empty).await?, Vec::<u8>::new());
+
+    let boundary = store.store_file(b"abcdefgh", 2).await?;
+    assert_eq!(boundary.chunks.len(), 2);
+    assert_eq!(store.load_file(&boundary).await?, b"abcdefgh");
+    Ok(())
+}
