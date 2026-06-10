@@ -6,5 +6,4 @@ tribbler/pkg
 www/node_modules
 www/package-lock.json
 # generated files
-lab/src/keeper.rs
 bins.json
