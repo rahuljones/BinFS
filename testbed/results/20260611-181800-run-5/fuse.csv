@@ -1,0 +1,8 @@
+experiment,operation,label,metadata_entries,file_size_bytes,chunk_size_bytes,clients,samples,successes,failures,p50_ms,p95_ms,p99_ms,mean_ms,throughput_ops_s,throughput_mib_s
+filesystem,write,binfs-fuse,,4096,,,30,30,0,234.162166,313.642250,331.830958,241.987635,4.132443,0.016142
+filesystem,read,binfs-fuse,,4096,,,30,30,0,140.350833,149.291500,186.284708,142.837297,7.000973,0.027348
+filesystem,write,binfs-fuse,,65536,,,30,30,0,379.139042,586.828625,917.268042,406.730678,2.458629,0.153664
+filesystem,read,binfs-fuse,,65536,,,30,30,0,258.103917,312.284083,623.115583,273.798885,3.652316,0.228270
+filesystem,write,binfs-fuse,,1048576,,,30,30,0,661.654667,706.514792,722.295042,664.491006,1.504911,1.504911
+filesystem,read,binfs-fuse,,1048576,,,30,30,0,646.963875,696.484042,697.499958,646.424228,1.546972,1.546972
+filesystem,list_directory,binfs-fuse,100,,,,30,30,0,80.830417,106.633709,111.639250,83.215685,12.016965,0.000000
