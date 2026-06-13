@@ -11,6 +11,7 @@ trap cleanup EXIT
 "${TESTBED_DIR}/start.sh"
 "${TESTBED_DIR}/functional.sh"
 "${TESTBED_DIR}/concurrency.sh"
+"${TESTBED_DIR}/fault-tolerance.sh"
 "${TESTBED_DIR}/benchmark.sh"
 
 cleanup
