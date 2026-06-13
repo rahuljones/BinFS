@@ -47,3 +47,35 @@ async fn create_without_overwrite_rejects_existing_file() -> FsResult<()> {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn uncommitted_file_reads_as_empty() -> FsResult<()> {
+    let fs = service();
+    let file = fs.create_file(ROOT_ID, "f", 0o644, false).await?;
+
+    assert_eq!(fs.read_file(&file.id).await?, Vec::<u8>::new());
+    Ok(())
+}
+
+#[tokio::test]
+async fn commit_after_unlink_is_rejected() -> FsResult<()> {
+    let fs = service();
+    let file = fs.create_file(ROOT_ID, "f", 0o644, false).await?;
+    fs.unlink(ROOT_ID, "f").await?;
+
+    let err = fs.commit_file(&file.id, b"orphan").await.unwrap_err();
+    assert_eq!(err.errno, libc::ENOENT);
+    assert!(fs.snapshot().await?.resolve_path("/f").is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn create_under_missing_parent_is_rejected() {
+    let fs = service();
+
+    let err = fs
+        .create_file("missing", "f", 0o644, false)
+        .await
+        .unwrap_err();
+    assert_eq!(err.errno, libc::ENOENT);
+}

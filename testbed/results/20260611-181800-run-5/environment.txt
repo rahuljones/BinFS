@@ -1,0 +1,10 @@
+run_id=20260611-181800-run-5
+date=2026-06-12T01:29:10Z
+backs=127.0.0.1:39000,127.0.0.1:39001,127.0.0.1:39002
+iterations=30
+warmup=5
+metadata_entries=0,100,1000,5000,10000
+file_sizes=4096,65536,1048576
+chunk_sizes=65536,1048576
+clients=1,2,4,8,16
+Darwin Anikets-MacBook-Pro.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:56:35 PST 2026; root:xnu-12377.91.3~2/RELEASE_ARM64_T6030 arm64
